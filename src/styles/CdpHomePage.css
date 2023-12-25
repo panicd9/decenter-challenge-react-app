@@ -1,0 +1,57 @@
+.cdp-home {
+    width: 80%;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.cdp-home__title {
+    text-align: center;
+    color: #333;
+}
+
+.cdp-home__controls {
+    display: flex;
+    justify-content: space-around; /* evenly distribute space around items */
+    margin-bottom: 20px;
+}
+
+.cdp-home__control {
+    flex: 1;
+    margin: 0 10px; /* add some space around each control */
+}
+
+.cdp-home__button {
+    display: inline-block;
+    padding: 0.3em 0.6em; /* reduce the padding */
+    text-decoration: none;
+    background: #668ad8; /* fallback color */
+    color: #FFF;
+    border-bottom: solid 4px #627295;
+    border-radius: 3px;
+    transition: .4s;
+    width: 30%; /* make the button take up the full width of its container */
+    text-align: center; /* center the button text */
+}
+
+.cdp-home__button:hover {
+    background: #8db7fd;
+}
+
+.cdp-home__button:active {
+    transform: translateY(4px);
+    border-bottom: none;
+}
+
+.cdp-home__list {
+    margin-top: 20px;
+}
+
+.cdp-home__item {
+    padding: 10px;
+    background-color: #eee;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
