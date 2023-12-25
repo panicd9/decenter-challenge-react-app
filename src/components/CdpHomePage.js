@@ -111,6 +111,8 @@ const CdpHomePage = () => {
     const debouncedFetchCdpList = React.useCallback(debounce(fetchCdpList, 500), [roughCdpId]);
 
     const handleFetchButtonClick = () => {
+        if(loading) return;
+        
         setCdpList([]);
         debouncedFetchCdpList();
     };
@@ -139,7 +141,7 @@ const CdpHomePage = () => {
             </div>
             <div className="cdp-home__list">
                 {loading ? <p>Loading...</p> : null}
-                {cdpList.map((cdp) => (
+                {cdpList.sort((a, b) => a.id - b.id).map((cdp) => (
                     <div key={cdp.id} className="cdp-home__item">
                         <p>ID: {cdp.id}</p>
                         <p>Collateral Type: {cdp.collateralType}</p>
