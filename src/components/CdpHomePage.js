@@ -1,3 +1,4 @@
+/* eslint-disable no-loop-func */
 /* global BigInt */
 import React, { useState } from 'react';
 import { utils } from '@defisaver/tokens';
@@ -27,6 +28,7 @@ const debounce = (func, delay) => {
 
 const fetchCdpData = async (cdpId) => {
     try {
+        console.log('Fetching CDP data: ', cdpId);
         let response = await cdpContract.methods.getCdpInfo(cdpId).call();
         response.id = cdpId;
         return response;
@@ -53,65 +55,81 @@ const CdpHomePage = () => {
     const [cdpList, setCdpList] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    function rpcCallRunner(maxConcurrency) {
-        let activeRpcCalls = 0;
-        const rpcCallQueue = [];
-    
-        function runRpcCall(rpcCall) {
-            setLoading(true);
-            activeRpcCalls++;
-            console.log(`Running RPC call. Active calls: ${activeRpcCalls}`);
-            rpcCall().finally(() => {
-                activeRpcCalls--;
-                console.log(`Finished RPC call. Active calls: ${activeRpcCalls}`);
-                if (rpcCallQueue.length > 0) {
-                    runRpcCall(rpcCallQueue.shift());
-                } else {
-                    setLoading(false);
-                }
-            });
-        }
-    
-        return function (rpcCall) {
-            if (activeRpcCalls < maxConcurrency) {
-                runRpcCall(rpcCall);
-            } else {
-                console.log(`Queueing RPC call. Queue length: ${rpcCallQueue.length}`);
-                rpcCallQueue.push(rpcCall);
-            }
-        };
-    }
-    
-    const runner = rpcCallRunner(5);
-
     const fetchCdpList = async () => {
-        const startCdpId = Math.max(roughCdpId - 10, 1);
-        const endCdpId = startCdpId + 20;
+        setLoading(true);
+        let foundCdpCount = 0;
+        let searchDistance = 0;
+        let activePromises = 0;
+        const maxActivePromises = 5;
+        const promiseQueue = [];
 
-        for (let id = startCdpId; id < endCdpId; id++) {
-            runner(() => fetchCdpData(id).then(cdpData => {
-                if (!cdpData) return;
+        const processQueue = async (cdpId) => {
+            if (foundCdpCount >= 20 || activePromises >= maxActivePromises || promiseQueue.length === 0) {
+                return;
+            }
 
-                const ilk = bytesToString(cdpData.ilk);
-                fetchIlkRate(ilk).then(rate => {
-                    const formattedCdp = {
-                        id: cdpData.id,
-                        collateralType: ilk,
-                        collateral: cdpData.collateral,
-                        debt: BigInt(cdpData.debt) * rate,
-                    };
+            activePromises++;
+            const promise = promiseQueue.shift();
+            const cdpData = await promise;
 
-                    setCdpList(prevCdpList => [...prevCdpList, formattedCdp]);
-                });
-            }));
+            if (cdpData.debt === 0n && cdpData.collateral === 0n) {
+                activePromises--;
+                processQueue();
+                return;
+            }
+
+            const ilk = bytesToString(cdpData.ilk);
+            if (ilk !== collateralType) {
+                activePromises--;
+                processQueue();
+                return; // Skip CDPs with a different collateral type
+            }
+
+            const rate = await fetchIlkRate(ilk);
+            const formattedCdp = {
+                id: cdpData.id,
+                collateralType: ilk,
+                collateral: cdpData.collateral,
+                debt: BigInt(cdpData.debt) * rate,
+            };
+
+            setCdpList(prevCdpList => { return [...prevCdpList, formattedCdp] });
+
+            foundCdpCount++;
+            console.log('Found CDP:', cdpData);
+            activePromises--;
+            processQueue();
+        };
+
+        while (foundCdpCount < 20) {
+            const searchUpId = Number(roughCdpId) + searchDistance;
+            const searchDownId = Number(roughCdpId) - searchDistance;
+
+            if (searchUpId > 0) {
+                promiseQueue.push(fetchCdpData(searchUpId));
+            }
+
+            if (searchDownId > 0 && searchDownId !== searchUpId) {
+                promiseQueue.push(fetchCdpData(searchDownId));
+            }
+
+            while (activePromises < maxActivePromises && promiseQueue.length > 0) {
+                processQueue();
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 100)); // Wait for promises to resolve
+            searchDistance++;
         }
+
+        console.log('Found cdp count:', foundCdpCount);
+        setLoading(false);
     };
 
-    const debouncedFetchCdpList = React.useCallback(debounce(fetchCdpList, 500), [roughCdpId]);
+    const debouncedFetchCdpList = React.useCallback(debounce(fetchCdpList, 500), [roughCdpId, collateralType]);
 
     const handleFetchButtonClick = () => {
-        if(loading) return;
-        
+        if (loading) return;
+
         setCdpList([]);
         debouncedFetchCdpList();
     };
