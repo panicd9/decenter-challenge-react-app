@@ -20,7 +20,6 @@ const debounce = (func, delay) => {
         }
         clearTimeout(timer);
         timer = setTimeout(() => {
-            func.apply(context, args);
             timer = null;
         }, delay);
     };
@@ -63,7 +62,7 @@ function rpcCallRunner(maxConcurrency) {
         });
     }
 
-    return function(rpcCall) {
+    return function (rpcCall) {
         if (activeRpcCalls < maxConcurrency) {
             runRpcCall(rpcCall);
         } else {
@@ -85,28 +84,15 @@ const CdpHomePage = () => {
 
     const fetchCdpList = async () => {
         setLoading(true);
-
         const startCdpId = Math.max(roughCdpId - 10, 1);
         const endCdpId = startCdpId + 20;
 
-        const cdpListPromises = [];
-
         for (let id = startCdpId; id < endCdpId; id++) {
-            const rpcCall = fetchCdpData(id);
-            runner(() => rpcCall);
-            cdpListPromises.push(fetchCdpData(id));
-        }
+            runner(() => fetchCdpData(id).then(cdpData => {
+                if (!cdpData) return;
 
-        try {
-            const cdpListData = await Promise.all(cdpListPromises);
-
-            const formattedCdpList = await Promise.all(
-                cdpListData.map(async (cdpData) => {
-                    if (!cdpData) return null;
-
-                    const ilk = bytesToString(cdpData.ilk);
-                    const rate = await fetchIlkRate(ilk);
-
+                const ilk = bytesToString(cdpData.ilk);
+                fetchIlkRate(ilk).then(rate => {
                     const formattedCdp = {
                         id: cdpData.id,
                         collateralType: ilk,
@@ -114,21 +100,18 @@ const CdpHomePage = () => {
                         debt: BigInt(cdpData.debt) * rate,
                     };
 
-                    return formattedCdp;
-                })
-            );
-
-            setCdpList(formattedCdpList.filter((cdp) => cdp !== null));
-        } catch (error) {
-            console.error('Error fetching CDP list:', error);
-        } finally {
-            setLoading(false);
+                    setCdpList(prevCdpList => [...prevCdpList, formattedCdp]);
+                });
+            }));
         }
+
+        setLoading(false);
     };
 
-    const debouncedFetchCdpList = React.useCallback(debounce(fetchCdpList, 500), []);
+    const debouncedFetchCdpList = React.useCallback(debounce(fetchCdpList, 500), [roughCdpId]);
 
     const handleFetchButtonClick = () => {
+        setCdpList([]);
         debouncedFetchCdpList();
     };
 
