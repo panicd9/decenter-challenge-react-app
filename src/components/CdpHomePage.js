@@ -46,44 +46,45 @@ const fetchIlkRate = async (ilk) => {
     }
 };
 
-function rpcCallRunner(maxConcurrency) {
-    let activeRpcCalls = 0;
-    const rpcCallQueue = [];
-
-    function runRpcCall(rpcCall) {
-        activeRpcCalls++;
-        console.log(`Running RPC call. Active calls: ${activeRpcCalls}`);
-        rpcCall().finally(() => {
-            activeRpcCalls--;
-            console.log(`Finished RPC call. Active calls: ${activeRpcCalls}`);
-            if (rpcCallQueue.length > 0) {
-                runRpcCall(rpcCallQueue.shift());
-            }
-        });
-    }
-
-    return function (rpcCall) {
-        if (activeRpcCalls < maxConcurrency) {
-            runRpcCall(rpcCall);
-        } else {
-            console.log(`Queueing RPC call. Queue length: ${rpcCallQueue.length}`);
-            rpcCallQueue.push(rpcCall);
-        }
-    };
-}
-
 const CdpHomePage = () => {
     const collateralTypes = ["ETH-A", "WBTC-A", "USDC-A"];
     const [collateralType, setCollateralType] = useState(collateralTypes[0]);
     const [roughCdpId, setRoughCdpId] = useState('');
     const [cdpList, setCdpList] = useState([]);
     const [loading, setLoading] = useState(false);
-    // const [disableFetchOnType, setDisableFetchOnType] = useState(true);
 
+    function rpcCallRunner(maxConcurrency) {
+        let activeRpcCalls = 0;
+        const rpcCallQueue = [];
+    
+        function runRpcCall(rpcCall) {
+            setLoading(true);
+            activeRpcCalls++;
+            console.log(`Running RPC call. Active calls: ${activeRpcCalls}`);
+            rpcCall().finally(() => {
+                activeRpcCalls--;
+                console.log(`Finished RPC call. Active calls: ${activeRpcCalls}`);
+                if (rpcCallQueue.length > 0) {
+                    runRpcCall(rpcCallQueue.shift());
+                } else {
+                    setLoading(false);
+                }
+            });
+        }
+    
+        return function (rpcCall) {
+            if (activeRpcCalls < maxConcurrency) {
+                runRpcCall(rpcCall);
+            } else {
+                console.log(`Queueing RPC call. Queue length: ${rpcCallQueue.length}`);
+                rpcCallQueue.push(rpcCall);
+            }
+        };
+    }
+    
     const runner = rpcCallRunner(5);
 
     const fetchCdpList = async () => {
-        setLoading(true);
         const startCdpId = Math.max(roughCdpId - 10, 1);
         const endCdpId = startCdpId + 20;
 
@@ -104,8 +105,6 @@ const CdpHomePage = () => {
                 });
             }));
         }
-
-        setLoading(false);
     };
 
     const debouncedFetchCdpList = React.useCallback(debounce(fetchCdpList, 500), [roughCdpId]);
@@ -135,7 +134,7 @@ const CdpHomePage = () => {
                     <label>Rough CDP ID:</label>
                     <input type="number" value={roughCdpId} onChange={(e) => setRoughCdpId(e.target.value)} />
                 </div>
-                <button className="cdp-home__button" onClick={handleFetchButtonClick} disabled={loading}>
+                <button className="cdp-home__button" onClick={handleFetchButtonClick} disabled={loading} style={{ backgroundColor: loading ? 'gray' : 'blue' }}>
                     Fetch CDPs
                 </button>
             </div>
