@@ -82,7 +82,7 @@ const CdpHomePage = () => {
             if (ilk !== collateralType) {
                 activePromises--;
                 processQueue();
-                return; // Skip CDPs with a different collateral type
+                return;
             }
 
             const rate = await fetchIlkRate(ilk);
@@ -117,11 +117,12 @@ const CdpHomePage = () => {
                 processQueue();
             }
 
-            await new Promise(resolve => setTimeout(resolve, 100)); // Wait for promises to resolve
+            await new Promise(resolve => setTimeout(resolve, 30)); // Wait for promises to resolve
             searchDistance++;
         }
 
         console.log('Found cdp count:', foundCdpCount);
+        console.log('Promises queue length:', promiseQueue.length);
         setLoading(false);
     };
 
