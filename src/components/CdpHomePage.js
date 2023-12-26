@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { utils } from '@defisaver/tokens';
 import { Buffer } from 'buffer';
 import { Link } from 'react-router-dom';
+import Pqueue from 'p-queue';
 import { cdpContract, ilksContract, formatDebt, formatCollateral, numberWithCommas } from '../utils/lib.js';
 import '../styles/CdpHomePage.css';
 
@@ -58,71 +59,85 @@ const CdpHomePage = () => {
     const fetchCdpList = async () => {
         setLoading(true);
         let foundCdpCount = 0;
-        let searchDistance = 0;
-        let activePromises = 0;
-        const maxActivePromises = 5;
-        const promiseQueue = [];
+        let searchDistanceUp = 0;
+        let searchDistanceDown = 1; // start from -1 to avoid searching the same cdp twice
+        const queue = new Pqueue({ concurrency: 5 });
+    
+        const cdpFound = new Promise((resolve) => {
+            const processCdpData = async (cdpId) => {
+                const cdpData = await fetchCdpData(cdpId);
+    
+                if (cdpData.debt === 0n && cdpData.collateral === 0n) {
+                    return;
+                }
+    
+                const ilk = bytesToString(cdpData.ilk);
+                if (ilk !== collateralType) {
+                    return;
+                }
+    
+                const rate = await fetchIlkRate(ilk);
+                const formattedCdp = {
+                    id: cdpData.id,
+                    collateralType: ilk,
+                    collateral: cdpData.collateral,
+                    debt: BigInt(cdpData.debt) * rate,
+                };
+    
+                setCdpList(prevCdpList => { return [...prevCdpList, formattedCdp] });
+    
+                foundCdpCount++;
+                console.log('Found CDP:', cdpData);
+    
+                if (foundCdpCount >= 20) {
+                    resolve();
+                }
+            };
+    
+            // Search up
+            const addTaskToQueueUp = async () => {
+                const searchUpId = Number(roughCdpId) + searchDistanceUp;
+    
+                if (searchUpId > 0) {
+                    queue.add(() => processCdpData(searchUpId)).then(() => {
+                        if (foundCdpCount < 20) {
+                            addTaskToQueueUp();
+                        }
+                    });
+                }
 
-        const processQueue = async (cdpId) => {
-            if (foundCdpCount >= 20 || activePromises >= maxActivePromises || promiseQueue.length === 0) {
-                return;
-            }
-
-            activePromises++;
-            const promise = promiseQueue.shift();
-            const cdpData = await promise;
-
-            if (cdpData.debt === 0n && cdpData.collateral === 0n) {
-                activePromises--;
-                processQueue();
-                return;
-            }
-
-            const ilk = bytesToString(cdpData.ilk);
-            if (ilk !== collateralType) {
-                activePromises--;
-                processQueue();
-                return;
-            }
-
-            const rate = await fetchIlkRate(ilk);
-            const formattedCdp = {
-                id: cdpData.id,
-                collateralType: ilk,
-                collateral: cdpData.collateral,
-                debt: BigInt(cdpData.debt) * rate,
+                searchDistanceUp++;
             };
 
-            setCdpList(prevCdpList => { return [...prevCdpList, formattedCdp] });
-
-            foundCdpCount++;
-            console.log('Found CDP:', cdpData);
-            activePromises--;
-            processQueue();
-        };
-
-        while (foundCdpCount < 20) {
-            const searchUpId = Number(roughCdpId) + searchDistance;
-            const searchDownId = Number(roughCdpId) - searchDistance;
-
-            if (searchUpId > 0) {
-                promiseQueue.push(fetchCdpData(searchUpId));
+            // Search down
+            const addTaskToQueueDown = async () => {
+                const searchDownId = Number(roughCdpId) - searchDistanceDown;
+                if (searchDownId > 0) {
+                    queue.add(() => processCdpData(searchDownId)).then(() => {
+                        if (foundCdpCount < 20) {
+                            addTaskToQueueDown();
+                        }
+                    });
+                }
+    
+                searchDistanceDown++;
+            };
+    
+            // Add initial tasks to the queue
+            for (let i = 0; i < 3; i++) {
+                addTaskToQueueUp();
             }
 
-            if (searchDownId > 0 && searchDownId !== searchUpId) {
-                promiseQueue.push(fetchCdpData(searchDownId));
+            for (let i = 0; i < 2; i++) {
+                addTaskToQueueDown();
             }
-
-            while (activePromises < maxActivePromises && promiseQueue.length > 0) {
-                processQueue();
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 30)); // Wait for promises to resolve
-            searchDistance++;
-        }
-
+        });
+    
+        await cdpFound;
+    
         console.log('Found cdp count:', foundCdpCount);
-        console.log('Promises queue length:', promiseQueue.length);
+        console.log('Queue size:', queue.size);
+        console.log("Queue pending:", queue.pending);
         setLoading(false);
     };
 
