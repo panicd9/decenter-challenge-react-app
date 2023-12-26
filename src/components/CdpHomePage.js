@@ -1,7 +1,7 @@
 /* eslint-disable no-loop-func */
 /* global BigInt */
 import React, { useState } from 'react';
-import { utils } from '@defisaver/tokens';
+import { set, utils } from '@defisaver/tokens';
 import { Buffer } from 'buffer';
 import { Link } from 'react-router-dom';
 import Pqueue from 'p-queue';
@@ -55,6 +55,7 @@ const CdpHomePage = () => {
     const [roughCdpId, setRoughCdpId] = useState('');
     const [cdpList, setCdpList] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [foundCdpCount, setFoundCdpCount] = useState(0);
 
     const fetchCdpList = async () => {
         setLoading(true);
@@ -87,6 +88,7 @@ const CdpHomePage = () => {
                 setCdpList(prevCdpList => { return [...prevCdpList, formattedCdp] });
     
                 foundCdpCount++;
+                setFoundCdpCount(foundCdpCount);
                 console.log('Found CDP:', cdpData);
     
                 if (foundCdpCount >= 20) {
@@ -173,7 +175,7 @@ const CdpHomePage = () => {
                 </button>
             </div>
             <div className="cdp-home__list">
-                {loading ? <p>Loading...</p> : null}
+                {loading ? <p>Found CDPs: {foundCdpCount}/20</p> : null}
                 {cdpList.sort((a, b) => a.id - b.id).map((cdp) => (
                     <div key={cdp.id} className="cdp-home__item">
                         <p>ID: {cdp.id}</p>
